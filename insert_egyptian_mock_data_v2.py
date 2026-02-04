@@ -609,9 +609,9 @@ def insert_questions(db: DatabaseConnection, courses):
             # Insert MCQ questions
             for mcq in course_questions.get('MCQ', []):
                 db.cursor.execute(
-                    """INSERT INTO Question (Q_Id, Q_Content, Q_Type, Q_Points, Q_hardness) 
-                       VALUES (?, ?, ?, ?, ?)""",
-                    (question_id, mcq['q'], 'MCQ', mcq['points'], mcq['difficulty'])
+                    """INSERT INTO Question (Q_Id, Q_Content, Q_Type, Q_Points, Q_hardness,C_ID) 
+                       VALUES (?, ?, ?, ?, ?,?)""",
+                    (question_id, mcq['q'], 'MCQ', mcq['points'], mcq['difficulty'],course['C_Id'])
                 )
                 questions.append({
                     'Q_Id': question_id, 
@@ -625,9 +625,9 @@ def insert_questions(db: DatabaseConnection, courses):
             # Insert True/False questions
             for tf in course_questions.get('TF', []):
                 db.cursor.execute(
-                    """INSERT INTO Question (Q_Id, Q_Content, Q_Type, Q_Points, Q_hardness) 
-                       VALUES (?, ?, ?, ?, ?)""",
-                    (question_id, tf['q'], 'TF', tf['points'], tf['difficulty'])
+                    """INSERT INTO Question (Q_Id, Q_Content, Q_Type, Q_Points, Q_hardness,C_ID) 
+                       VALUES (?, ?, ?, ?, ?,?)""",
+                    (question_id, tf['q'], 'TF', tf['points'], tf['difficulty'],course['C_Id'])
                 )
                 questions.append({
                     'Q_Id': question_id, 
@@ -641,10 +641,10 @@ def insert_questions(db: DatabaseConnection, courses):
             for i in range(10):
                 q_type = random.choice(['TF', 'MCQ'])
                 db.cursor.execute(
-                    """INSERT INTO Question (Q_Id, Q_Content, Q_Type, Q_Points, Q_hardness) 
-                       VALUES (?, ?, ?, ?, ?)""",
+                    """INSERT INTO Question (Q_Id, Q_Content, Q_Type, Q_Points, Q_hardness,C_ID) 
+                       VALUES (?, ?, ?, ?, ?,?)""",
                     (question_id, f"General question about {course_name} - Q{i+1}",
-                     q_type, random.choice([1, 2, 3]), random.choice(['Easy', 'Medium', 'Hard']))
+                     q_type, random.choice([1, 2, 3]), random.choice(['Easy', 'Medium', 'Hard']),course['C_Id'])
                 )
                 questions.append({
                     'Q_Id': question_id, 
@@ -695,22 +695,36 @@ def insert_choices(db: DatabaseConnection, questions):
     return choices
 
 def insert_exam_questions(db: DatabaseConnection, exams, questions):
-    """Insert Exam_Questions data"""
-    print("\n🔗 Inserting Exam-Question mappings...")
+    """Insert Exam_Questions data - course-aligned"""
+    print("\n🔗 Inserting Course-Aligned Exam-Question mappings...")
     count = 0
     
     for exam in exams:
-        num_questions = random.randint(5, 10)
-        selected_questions = random.sample(questions, min(num_questions, len(questions)))
-        for question in selected_questions:
+        # Query questions for this specific course from the database
+        db.cursor.execute(
+            "SELECT Q_Id FROM Question WHERE C_ID = ?",
+            (exam['C_Id'],)
+        )
+        course_question_ids = [row[0] for row in db.cursor.fetchall()]
+        
+        if not course_question_ids:
+            print(f"   ⚠️  Warning: No questions found for exam {exam['E_Id']} (Course {exam['C_Id']})")
+            continue
+        
+        # Select 5-10 questions from this course only
+        num_questions = min(random.randint(5, 10), len(course_question_ids))
+        selected_question_ids = random.sample(course_question_ids, num_questions)
+        
+        for question_id in selected_question_ids:
             db.cursor.execute(
                 "INSERT INTO Exam_Questions (E_Id, Q_Id) VALUES (?, ?)",
-                (exam['E_Id'], question['Q_Id'])
+                (exam['E_Id'], question_id)
             )
             count += 1
     
     db.commit()
-    print(f"   ✅ Inserted {count} exam-question mappings")
+    print(f"   ✅ Inserted {count} course-aligned exam-question mappings")
+
 
 def insert_student_exams(db: DatabaseConnection, students, exams, enrollments):
     """Insert Student_Exam data"""
